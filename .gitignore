@@ -1,0 +1,21 @@
+# Secrets 
+.env 
+.env.local 
+ECHO is on.
+# Python 
+__pycache__/ 
+*.pyc 
+venv/ 
+env/ 
+ECHO is on.
+# Vector Database 
+storage/chroma_db/ 
+storage/test_*/ 
+ECHO is on.
+# IDE 
+.vscode/ 
+.idea/ 
+ECHO is on.
+# OS 
+.DS_Store 
+Thumbs.db 
