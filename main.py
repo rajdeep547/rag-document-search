@@ -1,20 +1,26 @@
-# test_with_dialog.py - Test with real document from file dialog (Gemini 3.5 Flash)
+# main.py - Enhanced Document Q&A System with Multi-Document, Hybrid Search, and Analytics
 import os
 import sys
+import shutil
+import time
 from pathlib import Path
+from datetime import datetime
 from dotenv import load_dotenv
+from typing import List, Dict, Optional
+import json
 
+# Load environment variables
 load_dotenv()
 
-# Check for Google Gemini API key (not Groq)
+# Check for Google Gemini API key
 if not os.getenv("GOOGLE_API_KEY"):
-    print("="*60)
+    print("="*70)
     print("❌ ERROR: No Google Gemini API key found in .env file")
-    print("="*60)
+    print("="*70)
     print("\nPlease add to your .env file:")
     print("GOOGLE_API_KEY=your-gemini-api-key-here")
     print("\nGet your free API key from: https://aistudio.google.com/")
-    print("="*60)
+    print("="*70)
     sys.exit(1)
 
 print("✅ Google Gemini API key found")
@@ -28,207 +34,606 @@ except ImportError:
     TKINTER_AVAILABLE = False
     print("⚠️ tkinter not available. Using command line input.")
 
-def select_file():
-    """Open file selection dialog"""
-    if TKINTER_AVAILABLE:
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        
-        file_path = filedialog.askopenfilename(
-            title="Select a Document",
-            filetypes=[
-                ("All supported", "*.pdf *.txt *.md *.docx"),
-                ("PDF files", "*.pdf"),
-                ("Text files", "*.txt"),
-                ("Markdown files", "*.md"),
-                ("Word documents", "*.docx"),
-                ("All files", "*.*")
-            ]
-        )
-        root.destroy()
-        return file_path if file_path else None
-    else:
-        return input("Enter file path: ").strip().strip('"')
-
-# Import backend modules (Gemini versions)
+# Import backend modules
 from backend.document_processor import DocumentProcessor
 from backend.chroma_store import ChromaStoreManager
 from backend.qa_chain import QaChain
 from backend.config import Config
+from backend.hybrid_retriever import HybridRetriever
+from backend.multi_document import MultiDocumentManager
+from backend.cache_manager import CacheManager
+from backend.feedback_system import FeedbackSystem
 
-print("="*60)
-print("📚 Document Q&A System Test (Gemini 3.5 Flash)")
-print("   LLM: Gemini 3.5 Flash | Embeddings: gemini-embedding-001")
-print("="*60)
+# ============================================================================
+# ENHANCED DOCUMENT MANAGER CLASS
+# ============================================================================
 
-# Select file
-print("\n📁 Please select a document...")
-file_path = select_file()
-
-if not file_path:
-    print("❌ No file selected. Exiting...")
-    sys.exit(1)
-
-if not os.path.exists(file_path):
-    print(f"❌ File not found: {file_path}")
-    sys.exit(1)
-
-filename = Path(file_path).name
-print(f"\n✅ Selected: {filename}")
-
-# Step 1: Process document
-print("\n" + "-"*40)
-print("📄 Step 1: Processing Document")
-print("-"*40)
-
-try:
-    processor = DocumentProcessor()
-    print("   Loading and chunking...")
-    chunks = processor.process_file(file_path)
-    print(f"   ✅ Created {len(chunks)} chunks")
+class EnhancedDocumentQASystem:
+    """Enhanced Document Q&A System with all new features"""
     
-    if not chunks:
-        print("   ❌ No content extracted from document")
-        sys.exit(1)
+    def __init__(self):
+        """Initialize the enhanced system"""
+        print("\n🚀 Initializing Enhanced Document Q&A System...")
         
-except Exception as e:
-    print(f"   ❌ Error: {e}")
-    sys.exit(1)
-
-# Step 2: Create vector store (using Gemini embeddings)
-print("\n" + "-"*40)
-print("🗄️ Step 2: Creating Vector Store (Gemini Embeddings)")
-print("-"*40)
-
-try:
-    # Use a temporary test database
-    import shutil
-    test_db_path = "./storage/test_db"
-    if os.path.exists(test_db_path):
-        shutil.rmtree(test_db_path)
+        # Core components
+        self.processor = DocumentProcessor()
+        self.qa_chain = QaChain()
+        self.config = Config()
+        
+        # Enhanced components
+        self.cache = CacheManager()
+        self.feedback = FeedbackSystem()
+        
+        # Document management
+        self.documents = {}  # doc_id -> document info
+        self.stores = {}     # doc_id -> ChromaStoreManager
+        self.active_doc_id = None
+        
+        # Session tracking
+        self.session_stats = {
+            'start_time': datetime.now(),
+            'total_questions': 0,
+            'total_documents': 0,
+            'cache_hits': 0,
+            'cache_misses': 0
+        }
+        
+        # Multi-document support
+        self.multi_doc = MultiDocumentManager(self)
+        
+        print("✅ System initialized successfully!")
+        print(f"   📊 LLM: {self.config.LLM_MODEL}")
+        print(f"   🔢 Embeddings: {self.config.EMBEDDING_MODEL}")
+        print(f"   ⚡ Cache: {'Enabled' if self.cache.enabled else 'Disabled'}")
+        print("")
     
-    store = ChromaStoreManager(persist_dir=test_db_path)
-    store.add_documents(chunks)
-    print("   ✅ Vector store created")
+    def select_file(self) -> Optional[str]:
+        """Open file selection dialog"""
+        if TKINTER_AVAILABLE:
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            
+            file_path = filedialog.askopenfilename(
+                title="Select a Document",
+                filetypes=[
+                    ("All supported", "*.pdf *.txt *.md *.docx"),
+                    ("PDF files", "*.pdf"),
+                    ("Text files", "*.txt"),
+                    ("Markdown files", "*.md"),
+                    ("Word documents", "*.docx"),
+                    ("All files", "*.*")
+                ]
+            )
+            root.destroy()
+            return file_path if file_path else None
+        else:
+            return input("Enter file path: ").strip().strip('"')
     
-except Exception as e:
-    print(f"   ❌ Error: {e}")
-    sys.exit(1)
-
-# Step 3: Test search
-print("\n" + "-"*40)
-print("🔍 Step 3: Testing Search")
-print("-"*40)
-
-test_question = "What is this document about?"
-print(f"   Test question: '{test_question}'")
-
-try:
-    results = store.similarity_search(test_question, k=3)
-    print(f"   ✅ Found {len(results)} relevant chunks")
-    for i, r in enumerate(results):
-        print(f"      [{i+1}] Score: {r['similarity_score']:.3f}")
-        print(f"          Preview: {r['content'][:100]}...")
-except Exception as e:
-    print(f"   ❌ Error: {e}")
-
-# Step 4: Test QA chain (using Gemini 3.5 Flash LLM)
-print("\n" + "-"*40)
-print("💭 Step 4: Testing Q&A Generation (Gemini 3.5 Flash LLM)")
-print("-"*40)
-
-try:
-    qa = QaChain()
-    print("   Initialized QA chain with Gemini 3.5 Flash")
+    def ingest_document(self, file_path: str) -> Dict:
+        """
+        Ingest a document into the system
+        Returns: Document info dictionary
+        """
+        if not os.path.exists(file_path):
+            return {'success': False, 'error': 'File not found'}
+        
+        filename = Path(file_path).name
+        
+        # Check if document already exists
+        for doc_id, info in self.documents.items():
+            if info['name'] == filename:
+                return {
+                    'success': False, 
+                    'error': f'Document "{filename}" already exists',
+                    'doc_id': doc_id
+                }
+        
+        print(f"\n📄 Processing: {filename}")
+        
+        try:
+            # Step 1: Process document
+            print("   📖 Loading and chunking...")
+            chunks = self.processor.process_file(file_path)
+            
+            if not chunks:
+                return {'success': False, 'error': 'No content extracted'}
+            
+            print(f"   ✅ Created {len(chunks)} chunks")
+            
+            # Step 2: Create vector store
+            print("   🗄️ Creating vector store...")
+            doc_id = f"doc_{int(time.time())}_{len(self.documents)}"
+            persist_dir = f"./storage/db_{doc_id}"
+            
+            store = ChromaStoreManager(persist_dir=persist_dir)
+            store.add_documents(chunks)
+            
+            # Step 3: Store document info
+            self.documents[doc_id] = {
+                'id': doc_id,
+                'name': filename,
+                'path': file_path,
+                'chunks': len(chunks),
+                'store': store,
+                'persist_dir': persist_dir,
+                'ingested_at': datetime.now().isoformat(),
+                'size': os.path.getsize(file_path)
+            }
+            
+            self.stores[doc_id] = store
+            self.active_doc_id = doc_id
+            self.session_stats['total_documents'] += 1
+            
+            print(f"   ✅ Document ingested successfully!")
+            print(f"   📊 Document ID: {doc_id}")
+            
+            return {
+                'success': True,
+                'doc_id': doc_id,
+                'filename': filename,
+                'chunks': len(chunks),
+                'message': f'Successfully ingested "{filename}"'
+            }
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
     
-    # Use the search results
-    answer = qa.generate_answer(test_question, results)
-    print(f"\n📝 Answer: {answer['answer']}")
-    print(f"   Sources: {answer['sources']}")
-    print(f"   Confidence: {answer['confidence']}")
-    if answer.get('generation_time'):
-        print(f"   ⏱️ Generation time: {answer['generation_time']}s")
-    
-except Exception as e:
-    print(f"   ❌ Error: {e}")
-
-# Step 5: Interactive Q&A
-print("\n" + "-"*40)
-print("💬 Step 5: Interactive Q&A (Ask questions about your document)")
-print("-"*40)
-print("Type your questions (or 'quit' to exit)\n")
-
-question_count = 0
-while True:
-    question = input("❓ You: ").strip()
-    
-    if question.lower() in ['quit', 'exit', 'q']:
-        print("👋 Goodbye!")
-        break
-    
-    if question.lower() == 'status':
-        print(f"\n📊 Session Status:")
-        print(f"   - Document: {filename}")
-        print(f"   - Questions asked: {question_count}")
-        print(f"   - LLM: Gemini 3.5 Flash")
-        print(f"   - Embeddings: gemini-embedding-001")
-        continue
-    
-    if question.lower() == 'clear':
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print("="*60)
-        print("📚 Document Q&A System (Gemini 3.5 Flash)")
-        print("="*60)
-        print(f"\n📄 Active Document: {filename}")
-        print("\n💬 Ask your questions (type 'quit' to exit)\n")
-        continue
-    
-    if not question:
-        continue
-    
-    print("   🤔 Thinking with Gemini 3.5 Flash...", end="", flush=True)
-    
-    try:
+    def ask_question(self, question: str, doc_id: Optional[str] = None) -> Dict:
+        """
+        Ask a question to the document
+        """
+        if not question.strip():
+            return {'error': 'Please enter a question'}
+        
+        # Use active document if no doc_id specified
+        if doc_id is None:
+            doc_id = self.active_doc_id
+        
+        if doc_id not in self.documents:
+            return {'error': 'No document loaded. Please ingest a document first.'}
+        
+        # Check cache first
+        doc_name = self.documents[doc_id]['name']
+        cache_key = f"{question}_{doc_id}"
+        
+        cached_answer = self.cache.get(cache_key, doc_id)
+        if cached_answer:
+            self.session_stats['cache_hits'] += 1
+            cached_answer['from_cache'] = True
+            cached_answer['cache_hit'] = True
+            return cached_answer
+        
+        self.session_stats['cache_misses'] += 1
+        
         # Search for relevant chunks
-        docs = store.similarity_search(question, k=5)
+        store = self.documents[doc_id]['store']
         
-        if not docs:
-            print("\r" + " " * 40 + "\r", end="")
-            print("❌ No relevant information found in the document.")
-            continue
+        try:
+            # Use hybrid search
+            docs = store.similarity_search(question, k=self.config.TOP_K_RESULTS)
+            
+            if not docs:
+                return {
+                    'question': question,
+                    'answer': 'No relevant information found in the document.',
+                    'sources': [],
+                    'confidence': 'low',
+                    'from_cache': False
+                }
+            
+            # Generate answer
+            result = self.qa_chain.generate_answer(question, docs)
+            
+            # Add document info
+            result['doc_id'] = doc_id
+            result['doc_name'] = self.documents[doc_id]['name']
+            result['from_cache'] = False
+            
+            # Cache the answer
+            self.cache.set(cache_key, result, doc_id)
+            
+            # Update stats
+            self.session_stats['total_questions'] += 1
+            
+            return result
+            
+        except Exception as e:
+            return {'error': str(e)}
+    
+    def ask_all_documents(self, question: str) -> List[Dict]:
+        """Ask question to all documents"""
+        results = []
+        for doc_id in self.documents:
+            result = self.ask_question(question, doc_id)
+            results.append({
+                'doc_id': doc_id,
+                'doc_name': self.documents[doc_id]['name'],
+                'answer': result
+            })
+        return results
+    
+    def compare_documents(self, question: str) -> Dict:
+        """Compare answers across documents"""
+        results = self.ask_all_documents(question)
         
-        # Generate answer
-        result = qa.generate_answer(question, docs)
-        print("\r" + " " * 40 + "\r", end="")
+        comparison = {
+            'question': question,
+            'results': results,
+            'timestamp': datetime.now().isoformat()
+        }
         
-        question_count += 1
-        print(f"\n🤖 Answer: {result['answer']}")
-        if result['sources']:
-            print(f"📎 Sources: {', '.join(result['sources'])}")
-        print(f"📊 Confidence: {result['confidence']}")
-        if result.get('generation_time'):
-            print(f"⏱️ Generation time: {result['generation_time']}s")
-        print()
+        return comparison
+    
+    def show_status(self):
+        """Show system status"""
+        print("\n" + "="*60)
+        print("📊 SYSTEM STATUS")
+        print("="*60)
+        print(f"\n📚 Active Documents: {len(self.documents)}")
+        for doc_id, info in self.documents.items():
+            print(f"   📄 {info['name']} (ID: {doc_id})")
+            print(f"      - Chunks: {info['chunks']}")
+            print(f"      - Size: {info['size'] / 1024:.1f} KB")
         
+        print(f"\n💬 Total Questions: {self.session_stats['total_questions']}")
+        print(f"⚡ Cache Hits: {self.session_stats['cache_hits']}")
+        print(f"📊 Cache Misses: {self.session_stats['cache_misses']}")
+        print(f"⏱️  Cache Ratio: {self._get_cache_ratio():.1%}")
+        
+        print(f"\n🔧 Active Document: {self.documents.get(self.active_doc_id, {}).get('name', 'None')}")
+        print(f"🤖 LLM Model: {self.config.LLM_MODEL}")
+        print(f"🔢 Embedding Model: {self.config.EMBEDDING_MODEL}")
+        
+        # Feedback stats
+        feedback_stats = self.feedback.get_stats()
+        if feedback_stats['total_feedback'] > 0:
+            print(f"\n⭐ Average Rating: {feedback_stats['average_rating']:.1f}/5")
+            print(f"💬 Total Feedback: {feedback_stats['total_feedback']}")
+        
+        print("="*60)
+    
+    def _get_cache_ratio(self) -> float:
+        """Calculate cache hit ratio"""
+        total = self.session_stats['cache_hits'] + self.session_stats['cache_misses']
+        if total == 0:
+            return 0.0
+        return self.session_stats['cache_hits'] / total
+    
+    def show_feedback_stats(self):
+        """Show feedback statistics"""
+        print("\n" + "="*60)
+        print("📊 FEEDBACK STATISTICS")
+        print("="*60)
+        
+        stats = self.feedback.get_stats()
+        print(f"\n📝 Total Feedback: {stats['total_feedback']}")
+        print(f"⭐ Average Rating: {stats['average_rating']:.1f}/5")
+        
+        if stats['rating_distribution']:
+            print("\n📊 Rating Distribution:")
+            for rating, count in sorted(stats['rating_distribution'].items()):
+                bar = "█" * (count * 2)
+                print(f"   {rating}★: {bar} ({count})")
+        
+        if stats['top_questions']:
+            print("\n🔥 Top Questions:")
+            for q, count in list(stats['top_questions'].items())[:5]:
+                print(f"   📌 {q[:50]}... ({count} times)")
+        
+        print("\n💡 Improvement Suggestions:")
+        suggestions = self.feedback.get_improvement_suggestions()
+        for suggestion in suggestions:
+            print(f"   • {suggestion}")
+        
+        print("="*60)
+    
+    def export_session(self, filename: str = "session_export.json"):
+        """Export session data"""
+        export_data = {
+            'timestamp': datetime.now().isoformat(),
+            'documents': {
+                doc_id: {
+                    'name': info['name'],
+                    'chunks': info['chunks'],
+                    'size': info['size'],
+                    'ingested_at': info['ingested_at']
+                }
+                for doc_id, info in self.documents.items()
+            },
+            'stats': self.session_stats,
+            'feedback': self.feedback.feedback_data
+        }
+        
+        with open(filename, 'w') as f:
+            json.dump(export_data, f, indent=2)
+        
+        print(f"✅ Session exported to {filename}")
+    
+    def clear_cache(self):
+        """Clear all cached answers"""
+        self.cache.clear_cache()
+        print("✅ Cache cleared")
+    
+    def remove_document(self, doc_id: str):
+        """Remove a document from the system"""
+        if doc_id not in self.documents:
+            print(f"❌ Document {doc_id} not found")
+            return
+        
+        # Remove from storage
+        persist_dir = self.documents[doc_id]['persist_dir']
+        if os.path.exists(persist_dir):
+            shutil.rmtree(persist_dir)
+        
+        # Remove from tracking
+        del self.documents[doc_id]
+        del self.stores[doc_id]
+        
+        if self.active_doc_id == doc_id:
+            self.active_doc_id = list(self.documents.keys())[0] if self.documents else None
+        
+        print(f"✅ Document removed successfully")
+
+
+# ============================================================================
+# MAIN INTERACTIVE CLI
+# ============================================================================
+
+def main():
+    """Main interactive CLI"""
+    print("="*70)
+    print("📚 ENHANCED DOCUMENT Q&A SYSTEM")
+    print("   Built with: Gemini 3.5 Flash + ChromaDB + RAG")
+    print("   Features: Multi-Doc, Hybrid Search, Caching, Analytics")
+    print("="*70)
+    
+    # Initialize system
+    system = EnhancedDocumentQASystem()
+    
+    # Interactive menu
+    while True:
+        print("\n" + "-"*70)
+        print("📋 MAIN MENU")
+        print("-"*70)
+        print("1. 📄 Ingest Document")
+        print("2. 💬 Ask Question")
+        print("3. 📚 Ask All Documents")
+        print("4. 🔄 Compare Documents")
+        print("5. 📊 Show Status")
+        print("6. ⭐ Feedback Statistics")
+        print("7. 📥 Export Session")
+        print("8. 🗑️ Clear Cache")
+        print("9. 🗑️ Remove Document")
+        print("10. 🧹 Clear Screen")
+        print("11. 🚪 Exit")
+        print("-"*70)
+        
+        choice = input("Select option (1-11): ").strip()
+        
+        # ====================================================================
+        # 1. Ingest Document
+        # ====================================================================
+        if choice == "1":
+            print("\n📁 Please select a document...")
+            file_path = system.select_file()
+            
+            if not file_path:
+                print("❌ No file selected")
+                continue
+            
+            result = system.ingest_document(file_path)
+            if result['success']:
+                print(f"\n✅ {result['message']}")
+            else:
+                print(f"\n❌ Error: {result.get('error', 'Unknown error')}")
+        
+        # ====================================================================
+        # 2. Ask Question
+        # ====================================================================
+        elif choice == "2":
+            if not system.documents:
+                print("\n❌ No documents loaded. Please ingest a document first.")
+                continue
+            
+            # Select document
+            print("\n📚 Available Documents:")
+            doc_list = list(system.documents.items())
+            for i, (doc_id, info) in enumerate(doc_list, 1):
+                active = " (active)" if doc_id == system.active_doc_id else ""
+                print(f"   {i}. {info['name']}{active}")
+            
+            print(f"   {len(doc_list) + 1}. Ask all documents")
+            
+            doc_choice = input("\nSelect document (number): ").strip()
+            
+            if doc_choice.isdigit():
+                idx = int(doc_choice) - 1
+                if idx < len(doc_list):
+                    doc_id = doc_list[idx][0]
+                elif idx == len(doc_list):
+                    # Ask all documents
+                    question = input("\n❓ Your question: ").strip()
+                    if question:
+                        results = system.ask_all_documents(question)
+                        print(f"\n📝 Results from {len(results)} documents:")
+                        for result in results:
+                            print(f"\n📄 {result['doc_name']}:")
+                            if 'error' in result['answer']:
+                                print(f"   ❌ {result['answer']['error']}")
+                            else:
+                                print(f"   🤖 {result['answer'].get('answer', 'No answer')}")
+                                if result['answer'].get('confidence'):
+                                    print(f"   📊 Confidence: {result['answer']['confidence']}")
+                    continue
+                else:
+                    print("❌ Invalid selection")
+                    continue
+            else:
+                print("❌ Invalid input")
+                continue
+            
+            # Ask question to specific document
+            question = input("\n❓ Your question: ").strip()
+            if question:
+                result = system.ask_question(question, doc_id)
+                if 'error' in result:
+                    print(f"\n❌ {result['error']}")
+                else:
+                    print(f"\n🤖 Answer: {result.get('answer', 'No answer')}")
+                    if result.get('sources'):
+                        print(f"📎 Sources: {', '.join(result['sources'])}")
+                    if result.get('confidence'):
+                        print(f"📊 Confidence: {result['confidence']}")
+                    if result.get('generation_time'):
+                        print(f"⏱️ Generation time: {result['generation_time']}s")
+                    if result.get('from_cache'):
+                        print("⚡ (Answer from cache)")
+                    
+                    # Collect feedback
+                    feedback = input("\nWas this answer helpful? (y/n): ").strip().lower()
+                    if feedback in ['y', 'yes']:
+                        system.feedback.add_feedback(
+                            question,
+                            result.get('answer', ''),
+                            result.get('doc_name', 'Unknown'),
+                            5
+                        )
+                        print("✅ Thanks for your feedback!")
+                    elif feedback in ['n', 'no']:
+                        system.feedback.add_feedback(
+                            question,
+                            result.get('answer', ''),
+                            result.get('doc_name', 'Unknown'),
+                            1
+                        )
+                        print("✅ We'll work on improving!")
+        
+        # ====================================================================
+        # 3. Ask All Documents
+        # ====================================================================
+        elif choice == "3":
+            if not system.documents:
+                print("\n❌ No documents loaded.")
+                continue
+            
+            question = input("\n❓ Your question for all documents: ").strip()
+            if question:
+                results = system.ask_all_documents(question)
+                print(f"\n📝 Results from {len(results)} documents:")
+                for result in results:
+                    print(f"\n📄 {result['doc_name']}:")
+                    if 'error' in result['answer']:
+                        print(f"   ❌ {result['answer']['error']}")
+                    else:
+                        print(f"   🤖 {result['answer'].get('answer', 'No answer')}")
+                        if result['answer'].get('confidence'):
+                            print(f"   📊 Confidence: {result['answer']['confidence']}")
+        
+        # ====================================================================
+        # 4. Compare Documents
+        # ====================================================================
+        elif choice == "4":
+            if len(system.documents) < 2:
+                print("\n❌ Need at least 2 documents for comparison.")
+                continue
+            
+            question = input("\n❓ Question to compare: ").strip()
+            if question:
+                comparison = system.compare_documents(question)
+                print(f"\n📊 Comparison Results:")
+                print(f"Question: {comparison['question']}\n")
+                
+                for result in comparison['results']:
+                    print(f"📄 {result['doc_name']}:")
+                    if 'error' in result['answer']:
+                        print(f"   ❌ {result['answer']['error']}")
+                    else:
+                        print(f"   🤖 {result['answer'].get('answer', 'No answer')}")
+                        print(f"   📊 Confidence: {result['answer'].get('confidence', 'N/A')}")
+                    print()
+        
+        # ====================================================================
+        # 5. Show Status
+        # ====================================================================
+        elif choice == "5":
+            system.show_status()
+        
+        # ====================================================================
+        # 6. Feedback Statistics
+        # ====================================================================
+        elif choice == "6":
+            system.show_feedback_stats()
+        
+        # ====================================================================
+        # 7. Export Session
+        # ====================================================================
+        elif choice == "7":
+            filename = input("Export filename (default: session_export.json): ").strip()
+            if not filename:
+                filename = "session_export.json"
+            system.export_session(filename)
+        
+        # ====================================================================
+        # 8. Clear Cache
+        # ====================================================================
+        elif choice == "8":
+            system.clear_cache()
+        
+        # ====================================================================
+        # 9. Remove Document
+        # ====================================================================
+        elif choice == "9":
+            if not system.documents:
+                print("\n❌ No documents to remove.")
+                continue
+            
+            print("\n📚 Available Documents:")
+            doc_list = list(system.documents.items())
+            for i, (doc_id, info) in enumerate(doc_list, 1):
+                print(f"   {i}. {info['name']}")
+            
+            doc_choice = input("Select document to remove (number): ").strip()
+            if doc_choice.isdigit():
+                idx = int(doc_choice) - 1
+                if 0 <= idx < len(doc_list):
+                    doc_id = doc_list[idx][0]
+                    confirm = input(f"Remove {system.documents[doc_id]['name']}? (y/n): ").strip().lower()
+                    if confirm == 'y':
+                        system.remove_document(doc_id)
+                else:
+                    print("❌ Invalid selection")
+        
+        # ====================================================================
+        # 10. Clear Screen
+        # ====================================================================
+        elif choice == "10":
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print("="*70)
+            print("📚 ENHANCED DOCUMENT Q&A SYSTEM")
+            print("="*70)
+        
+        # ====================================================================
+        # 11. Exit
+        # ====================================================================
+        elif choice == "11":
+            print("\n👋 Goodbye!")
+            print(f"📊 Session Summary:")
+            print(f"   - Total Documents: {system.session_stats['total_documents']}")
+            print(f"   - Total Questions: {system.session_stats['total_questions']}")
+            print(f"   - Cache Hits: {system.session_stats['cache_hits']}")
+            print(f"   - Cache Ratio: {system._get_cache_ratio():.1%}")
+            break
+        
+        else:
+            print("❌ Invalid choice. Please select 1-11.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n👋 Goodbye!")
     except Exception as e:
-        print("\r" + " " * 40 + "\r", end="")
-        print(f"❌ Error: {e}")
-
-# Clean up
-print("\n" + "-"*40)
-print("🧹 Cleaning up test database...")
-print("-"*40)
-
-import shutil
-if os.path.exists("./storage/test_db"):
-    shutil.rmtree("./storage/test_db")
-    print("✅ Test database cleaned up")
-
-print("\n" + "="*60)
-print(f"📊 Session Summary:")
-print(f"   - Document: {filename}")
-print(f"   - Questions asked: {question_count}")
-print(f"   - LLM: Gemini 3.5 Flash")
-print(f"   - Embeddings: gemini-embedding-001")
-print("="*60)
+        print(f"\n❌ Unexpected error: {e}")
+        print("Please report this issue.")

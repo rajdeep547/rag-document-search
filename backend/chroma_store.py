@@ -2,7 +2,7 @@
 import os
 import time
 import shutil
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from backend.gemini_embeddings import GeminiEmbeddings
@@ -80,6 +80,59 @@ class ChromaStoreManager:
             print(f"   📊 Top score: {formatted[0]['similarity_score']}")
         return formatted
     
+    def similarity_search_with_score(self, query: str, k: int = 5) -> List[Tuple[Document, float]]:
+        """
+        Search for similar documents with scores - returns Document objects with scores
+        
+        Args:
+            query: Search query
+            k: Number of results
+            
+        Returns:
+            List of (Document, score) tuples
+        """
+        if not self.is_initialized or self.vectorstore is None:
+            return []
+        
+        try:
+            results = self.vectorstore.similarity_search_with_score(query, k=k)
+            return results
+        except Exception as e:
+            print(f"   ❌ Search error: {e}")
+            return []
+    
+    def get_document_by_index(self, index: int) -> Optional[Document]:
+        """
+        Get a document by its index - NEW METHOD
+        
+        Args:
+            index: Document index or ID
+            
+        Returns:
+            Document object or None
+        """
+        if not self.is_initialized or self.vectorstore is None:
+            return None
+        
+        try:
+            # Get all documents
+            results = self.vectorstore.get()
+            
+            if results and results['documents'] and results['metadatas']:
+                # Check if we can find by metadata
+                for i, (doc_text, metadata) in enumerate(zip(results['documents'], results['metadatas'])):
+                    # Check by index in metadata or by position
+                    if metadata and metadata.get('chunk_index') == index:
+                        return Document(page_content=doc_text, metadata=metadata)
+                    if i == index:
+                        return Document(page_content=doc_text, metadata=metadata)
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error getting document: {e}")
+            return None
+    
     def get_all_sources(self) -> list:
         if not self.is_initialized or self.vectorstore is None:
             return []
@@ -101,7 +154,6 @@ class ChromaStoreManager:
                 if results['ids']:
                     self.vectorstore.delete(ids=results['ids'])
                     print("🗑️ Collection cleared")
-                    # Small delay to ensure deletion is complete
                     time.sleep(0.5)
                     return True
                 else:
@@ -116,11 +168,9 @@ class ChromaStoreManager:
         """Close any open connections to the database"""
         try:
             if self.vectorstore:
-                # Force release any locks
                 self.vectorstore = None
                 self.is_initialized = False
                 print("🔌 Connections closed")
-                # Small delay for Windows file lock to release
                 time.sleep(1)
         except Exception as e:
             print(f"   ⚠️ Close connections error: {e}")
@@ -131,14 +181,12 @@ class ChromaStoreManager:
         
         if os.path.exists(self.persist_dir):
             try:
-                # Wait a moment for any locks to release
                 time.sleep(2)
                 shutil.rmtree(self.persist_dir)
                 print(f"🗑️ Deleted persist directory: {self.persist_dir}")
                 return True
             except PermissionError:
                 print(f"   ⚠️ Could not delete directory immediately (file locked)")
-                # Try force delete on Windows
                 try:
                     os.system(f'rmdir /s /q "{self.persist_dir}" 2>nul')
                     print(f"   ✅ Force deleted using system command")
