@@ -9,13 +9,13 @@ class Config:
     # ========================================================================
     # API Configuration
     # ========================================================================
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-    
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
     # ========================================================================
     # Model Configuration - Using correct model names
     # ========================================================================
-    LLM_MODEL = os.getenv("LLM_MODEL", "gemini-1.5-flash")  # Correct name
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
+    LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
     MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2048"))
     
@@ -69,16 +69,16 @@ class Config:
     # ========================================================================
     @classmethod
     def validate(cls):
-        if not cls.GOOGLE_API_KEY:
-            raise ValueError("GOOGLE_API_KEY not found in .env file")
-        
+        if not cls.GROQ_API_KEY:
+            raise ValueError("GROQ_API_KEY not found in .env file")
+
         # Create storage directory
         cls.STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        
+
         return True
 
 # Validate on import
 Config.validate()
-print("✅ Config loaded (Gemini 1.5 Flash)")
+print("✅ Config loaded (Groq Llama 3.3 70B)")
 print(f"   📊 LLM Model: {Config.LLM_MODEL}")
 print(f"   🔢 Embedding Model: {Config.EMBEDDING_MODEL}")

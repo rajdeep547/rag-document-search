@@ -2,6 +2,13 @@
 """
 Backend package for Document Q&A System
 """
+import sys
+
+# Windows consoles default to a non-UTF-8 codepage, which can't print
+# the emoji used in this package's status/log messages.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from backend.config import Config
 from backend.orchestrator import DocumentQaOrchestrator

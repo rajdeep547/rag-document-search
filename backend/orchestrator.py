@@ -19,9 +19,9 @@ class DocumentQaOrchestrator:
         
         print("\n" + "="*70)
         print("🚀 Starting Enhanced Document QA System")
-        print("   Powered by Gemini 3.5 Flash")
-        print("   ✦ LLM: Gemini 3.5 Flash")
-        print("   ✦ Embeddings: gemini-embedding-001")
+        print("   Powered by Groq (Llama 3.3 70B)")
+        print(f"   ✦ LLM: {self.config.LLM_MODEL}")
+        print(f"   ✦ Embeddings: {self.config.EMBEDDING_MODEL}")
         print("   ✦ Features: Multi-Doc, Caching, Feedback")
         print("="*70)
         
@@ -202,6 +202,22 @@ class DocumentQaOrchestrator:
                 "from_cache": False
             }
     
+    def summarize_document(self, filename: str, length: str = "medium") -> Dict:
+        """Summarize a specific ingested document"""
+        if filename not in self.ingested:
+            return {"success": False, "message": f"Document not found: {filename}"}
+
+        print(f"\n📝 Summarizing: {filename}")
+        chunks = self.store.get_chunks_by_source(filename)
+
+        if not chunks:
+            return {"success": False, "message": f"No content found for: {filename}"}
+
+        result = self.qa.generate_summary(chunks, doc_name=filename, length=length)
+        result['success'] = 'error' not in result
+        result['filename'] = filename
+        return result
+
     def get_status(self) -> Dict:
         """Get system status"""
         feedback_stats = self.feedback.get_stats()

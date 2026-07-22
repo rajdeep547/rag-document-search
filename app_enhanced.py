@@ -158,7 +158,7 @@ with st.sidebar:
     st.markdown("""
     <div style='text-align: center; padding: 0.5rem 0;'>
         <h2>📚 Document Q&A</h2>
-        <p style='color: #666; font-size: 0.8rem;'>Gemini 1.5 Flash</p>
+        <p style='color: #666; font-size: 0.8rem;'>Groq · Llama 3.3 70B</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -193,11 +193,14 @@ with st.sidebar:
             for file in new_files:
                 with st.spinner(f"⏳ Processing {file.name}..."):
                     try:
-                        suffix = f".{file.name.split('.')[-1]}"
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                        # Preserve the original filename so it matches the
+                        # "source" metadata stored with each chunk (needed
+                        # for per-document lookups like summarization).
+                        tmp_dir = tempfile.mkdtemp()
+                        tmp_path = os.path.join(tmp_dir, file.name)
+                        with open(tmp_path, 'wb') as tmp:
                             tmp.write(file.getvalue())
-                            tmp_path = tmp.name
-                        
+
                         result = st.session_state.orchestrator.ingest_document(tmp_path)
                         
                         if result.get('success', False):
@@ -243,7 +246,7 @@ with st.sidebar:
         st.caption(f"📚 Docs: {len(st.session_state.documents)}")
         st.caption(f"💬 Queries: {st.session_state.query_count}")
         st.caption(f"⚡ Cache: {'On' if status.get('cache_enabled') else 'Off'}")
-        st.caption(f"🤖 Model: Gemini 1.5 Flash")
+        st.caption(f"🤖 Model: Groq Llama 3.3 70B")
     except:
         st.caption("🟡 Initializing...")
 
@@ -333,7 +336,7 @@ if st.session_state.page == "💬 Chat":
         else:
             st.session_state.chat_history.append({'role': 'user', 'content': question})
             
-            with st.spinner("🤔 Thinking with Gemini..."):
+            with st.spinner("🤔 Thinking with Groq..."):
                 try:
                     result = st.session_state.orchestrator.ask(question)
                     st.session_state.query_count += 1
@@ -498,11 +501,53 @@ elif st.session_state.page == "📁 Documents":
                     st.markdown(f"""
                     <div style='background:#f8f9fa; padding:0.6rem; border-radius:6px; margin:0.2rem 0;'>
                         <strong>{name}</strong><br>
-                        Size: {info.get('size', 'N/A')} | 
-                        Chunks: {info.get('chunks', 0)} | 
+                        Size: {info.get('size', 'N/A')} |
+                        Chunks: {info.get('chunks', 0)} |
                         Uploaded: {info.get('uploaded', 'N/A')}
                     </div>
                     """, unsafe_allow_html=True)
+
+        st.divider()
+        st.subheader("📝 Summarize a Document")
+
+        sum_col1, sum_col2, sum_col3 = st.columns([3, 2, 1])
+        with sum_col1:
+            doc_to_summarize = st.selectbox(
+                "Choose a document",
+                list(st.session_state.documents.keys()),
+                label_visibility="collapsed"
+            )
+        with sum_col2:
+            summary_length = st.selectbox(
+                "Length",
+                ["short", "medium", "long"],
+                index=1,
+                label_visibility="collapsed"
+            )
+        with sum_col3:
+            summarize_clicked = st.button("✨ Summarize", use_container_width=True, type="primary")
+
+        if summarize_clicked and doc_to_summarize:
+            with st.spinner(f"🤔 Summarizing {doc_to_summarize} with Groq..."):
+                try:
+                    result = st.session_state.orchestrator.summarize_document(doc_to_summarize, length=summary_length)
+                    st.session_state.setdefault('summaries', {})[doc_to_summarize] = result
+                except Exception as e:
+                    st.session_state.setdefault('summaries', {})[doc_to_summarize] = {
+                        'success': False, 'message': str(e)
+                    }
+
+        if 'summaries' in st.session_state and doc_to_summarize in st.session_state.summaries:
+            result = st.session_state.summaries[doc_to_summarize]
+            if result.get('success'):
+                st.markdown(f"""
+                <div style='background:#f8f9fa; padding:1rem; border-radius:8px; margin-top:0.5rem; color:#1a1a1a;'>
+                    {result.get('summary', 'No summary generated')}
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption(f"⏱️ Generated in {result.get('generation_time', 0)}s · {result.get('chunks_used', 0)} chunks used")
+            else:
+                st.error(f"❌ {result.get('message') or result.get('summary', 'Summarization failed')}")
     else:
         st.info("📚 No documents uploaded yet. Upload documents from the sidebar.")
 
@@ -556,7 +601,7 @@ elif st.session_state.page == "⭐ Feedback":
 st.divider()
 st.markdown(f"""
 <div style='text-align: center; color: #999; font-size: 0.75rem; padding: 0.5rem;'>
-    🚀 Built with LangChain · Gemini 1.5 Flash · ChromaDB
+    🚀 Built with LangChain · Groq Llama 3.3 70B · ChromaDB
     <br>
     📚 {len(st.session_state.documents)} docs · 💬 {st.session_state.query_count} queries · ⭐ {st.session_state.feedback_count} feedbacks
 </div>

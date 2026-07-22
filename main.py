@@ -12,18 +12,18 @@ import json
 # Load environment variables
 load_dotenv()
 
-# Check for Google Gemini API key
-if not os.getenv("GOOGLE_API_KEY"):
+# Check for Groq API key
+if not os.getenv("GROQ_API_KEY"):
     print("="*70)
-    print("❌ ERROR: No Google Gemini API key found in .env file")
+    print("❌ ERROR: No Groq API key found in .env file")
     print("="*70)
     print("\nPlease add to your .env file:")
-    print("GOOGLE_API_KEY=your-gemini-api-key-here")
-    print("\nGet your free API key from: https://aistudio.google.com/")
+    print("GROQ_API_KEY=your-groq-api-key-here")
+    print("\nGet your free API key from: https://console.groq.com/keys")
     print("="*70)
     sys.exit(1)
 
-print("✅ Google Gemini API key found")
+print("✅ Groq API key found")
 
 # Try to import tkinter for file dialog
 try:
@@ -241,6 +241,25 @@ class EnhancedDocumentQASystem:
         except Exception as e:
             return {'error': str(e)}
     
+    def summarize_document(self, doc_id: Optional[str] = None, length: str = "medium") -> Dict:
+        """Summarize a document by ID (defaults to the active document)"""
+        if doc_id is None:
+            doc_id = self.active_doc_id
+
+        if doc_id not in self.documents:
+            return {'error': 'No document loaded. Please ingest a document first.'}
+
+        store = self.documents[doc_id]['store']
+        chunks = store.get_all_chunks()
+
+        if not chunks:
+            return {'error': 'No content found for this document.'}
+
+        result = self.qa_chain.generate_summary(chunks, doc_name=self.documents[doc_id]['name'], length=length)
+        result['doc_id'] = doc_id
+        result['doc_name'] = self.documents[doc_id]['name']
+        return result
+
     def ask_all_documents(self, question: str) -> List[Dict]:
         """Ask question to all documents"""
         results = []
@@ -384,7 +403,7 @@ def main():
     """Main interactive CLI"""
     print("="*70)
     print("📚 ENHANCED DOCUMENT Q&A SYSTEM")
-    print("   Built with: Gemini 3.5 Flash + ChromaDB + RAG")
+    print("   Built with: Groq (Llama 3.3 70B) + ChromaDB + RAG")
     print("   Features: Multi-Doc, Hybrid Search, Caching, Analytics")
     print("="*70)
     
@@ -406,10 +425,11 @@ def main():
         print("8. 🗑️ Clear Cache")
         print("9. 🗑️ Remove Document")
         print("10. 🧹 Clear Screen")
-        print("11. 🚪 Exit")
+        print("11. 📝 Summarize Document")
+        print("12. 🚪 Exit")
         print("-"*70)
-        
-        choice = input("Select option (1-11): ").strip()
+
+        choice = input("Select option (1-12): ").strip()
         
         # ====================================================================
         # 1. Ingest Document
@@ -614,9 +634,45 @@ def main():
             print("="*70)
         
         # ====================================================================
-        # 11. Exit
+        # 11. Summarize Document
         # ====================================================================
         elif choice == "11":
+            if not system.documents:
+                print("\n❌ No documents loaded. Please ingest a document first.")
+                continue
+
+            print("\n📚 Available Documents:")
+            doc_list = list(system.documents.items())
+            for i, (doc_id, info) in enumerate(doc_list, 1):
+                active = " (active)" if doc_id == system.active_doc_id else ""
+                print(f"   {i}. {info['name']}{active}")
+
+            doc_choice = input("\nSelect document (number, or Enter for active): ").strip()
+            if not doc_choice:
+                doc_id = system.active_doc_id
+            elif doc_choice.isdigit() and 0 <= int(doc_choice) - 1 < len(doc_list):
+                doc_id = doc_list[int(doc_choice) - 1][0]
+            else:
+                print("❌ Invalid selection")
+                continue
+
+            length = input("Summary length (short/medium/long) [medium]: ").strip().lower() or "medium"
+            if length not in ("short", "medium", "long"):
+                length = "medium"
+
+            print(f"\n📝 Summarizing {system.documents[doc_id]['name']}...")
+            result = system.summarize_document(doc_id, length=length)
+            if 'error' in result:
+                print(f"\n❌ {result['error']}")
+            else:
+                print(f"\n📄 Summary of {result.get('doc_name', 'document')}:\n")
+                print(result.get('summary', 'No summary generated'))
+                print(f"\n⏱️ Generated in {result.get('generation_time', 0)}s ({result.get('chunks_used', 0)} chunks)")
+
+        # ====================================================================
+        # 12. Exit
+        # ====================================================================
+        elif choice == "12":
             print("\n👋 Goodbye!")
             print(f"📊 Session Summary:")
             print(f"   - Total Documents: {system.session_stats['total_documents']}")
@@ -624,9 +680,9 @@ def main():
             print(f"   - Cache Hits: {system.session_stats['cache_hits']}")
             print(f"   - Cache Ratio: {system._get_cache_ratio():.1%}")
             break
-        
+
         else:
-            print("❌ Invalid choice. Please select 1-11.")
+            print("❌ Invalid choice. Please select 1-12.")
 
 
 if __name__ == "__main__":

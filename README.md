@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-FF4B4B.svg)](https://streamlit.io/)
-[![Gemini](https://img.shields.io/badge/Gemini-1.5%20Flash-4285F4.svg)](https://ai.google.dev/)
+[![Groq](https://img.shields.io/badge/Groq-Llama%203.3%2070B-F55036.svg)](https://groq.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > **🤖 Chat with your documents like magic!** Upload PDFs, Word docs, or text files and ask natural language questions. Get AI-powered answers with **source citations** in seconds.
@@ -20,7 +20,7 @@ This is an **intelligent document question-answering system**. In plain English:
 3. **The AI finds the answer** by searching through your document's content.
 4. **You get a clear answer** with a link to the exact source and a confidence score.
 
-Under the hood, it uses **RAG (Retrieval-Augmented Generation)**, which combines a powerful search engine with Google's Gemini LLM to give you accurate, contextual answers.
+Under the hood, it uses **RAG (Retrieval-Augmented Generation)**, which combines a powerful search engine with Groq's ultra-fast Llama LLM to give you accurate, contextual answers.
 
 ---
 
@@ -34,7 +34,7 @@ Under the hood, it uses **RAG (Retrieval-Augmented Generation)**, which combines
 | 📎 **Source Citations** | See exactly which document and section the answer came from |
 | 📊 **Confidence Scoring** | Know how confident the AI is (High/Medium/Low) |
 | 🖥️ **User-Friendly Interface** | Drag & drop file upload with Streamlit |
-| ⚡ **Fast Responses** | Powered by Google's Gemini 1.5 Flash |
+| ⚡ **Fast Responses** | Powered by Groq's Llama 3.3 70B (ultra-low latency) |
 | 📈 **Analytics Dashboard** | Track usage, performance, and feedback |
 | ⭐ **Feedback System** | Rate answers and help the system improve |
 | 🔄 **Multi-Document Support** | Query across multiple documents at once |
@@ -63,7 +63,7 @@ Under the hood, it uses **RAG (Retrieval-Augmented Generation)**, which combines
 │ │ │
 │ ▼ │
 │ │
-│ 7. 🤖 Gemini LLM Generates ──► 8. 📝 Answer + Citations │
+│ 7. 🤖 Groq LLM Generates ──► 8. 📝 Answer + Citations │
 │ (Context-aware answer) (Displayed in the UI) │
 │ │
 └─────────────────────────────────────────────────────────────────┘
@@ -76,11 +76,11 @@ text
 
 | Category | Technology | Purpose |
 |----------|------------|---------|
-| **AI Model** | Google Gemini 1.5 Flash | Core LLM for generating answers |
+| **AI Model** | Groq Llama 3.3 70B | Core LLM for generating answers |
 | **LLM Framework** | LangChain | Orchestrates LLM and vector database |
 | **Vector Database** | ChromaDB | Stores and retrieves document embeddings |
 | **Web Interface** | Streamlit | Interactive, user-friendly UI |
-| **Embeddings** | gemini-embedding-001 | Converts text to vectors |
+| **Embeddings** | sentence-transformers (all-MiniLM-L6-v2, local) | Converts text to vectors |
 | **Search** | Hybrid Search | Semantic + keyword (BM25) search |
 | **Caching** | Redis (Optional) | Faster response times for repeated queries |
 | **Language** | Python 3.9+ | Backend and core logic |
@@ -91,7 +91,7 @@ text
 
 ### Prerequisites
 - Python 3.9 or higher
-- Google Gemini API key (free - get it from [Google AI Studio](https://aistudio.google.com/))
+- Groq API key (free - get it from [Groq Console](https://console.groq.com/keys))
 
 ### Installation
 

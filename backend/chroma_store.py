@@ -5,23 +5,23 @@ import shutil
 from typing import List, Dict, Any, Optional, Tuple
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from backend.gemini_embeddings import GeminiEmbeddings
+from backend.local_embeddings import LocalEmbeddings
 
 class ChromaStoreManager:
-    def __init__(self, 
-                 persist_dir="./storage/chroma_db", 
+    def __init__(self,
+                 persist_dir="./storage/chroma_db",
                  collection="docs",
-                 embedding_model="gemini-embedding-001"):
+                 embedding_model="all-MiniLM-L6-v2"):
         self.persist_dir = persist_dir
         self.collection = collection
         self.embedding_model = embedding_model
-        
-        # Use Gemini for embeddings
-        self.embeddings = GeminiEmbeddings(model=embedding_model)
+
+        # Use local sentence-transformers for embeddings
+        self.embeddings = LocalEmbeddings(model=embedding_model)
         self.vectorstore = None
         self.is_initialized = False
         self._init()
-        print("✅ ChromaStore ready (Gemini embeddings)")
+        print("✅ ChromaStore ready (local embeddings)")
     
     def _init(self):
         os.makedirs(self.persist_dir, exist_ok=True)
@@ -145,6 +145,38 @@ class ChromaStoreManager:
             return sorted(list(sources))
         except Exception:
             return []
+
+    def get_chunks_by_source(self, source: str) -> List[Dict]:
+        """Get all chunks belonging to a specific source document, in reading order"""
+        if not self.is_initialized or self.vectorstore is None:
+            return []
+        try:
+            results = self.vectorstore.get(where={"source": source})
+        except Exception as e:
+            print(f"   ❌ Error fetching chunks for {source}: {e}")
+            return []
+        return self._format_get_results(results)
+
+    def get_all_chunks(self) -> List[Dict]:
+        """Get every chunk currently stored in this collection, in reading order"""
+        if not self.is_initialized or self.vectorstore is None:
+            return []
+        try:
+            results = self.vectorstore.get()
+        except Exception as e:
+            print(f"   ❌ Error fetching chunks: {e}")
+            return []
+        return self._format_get_results(results)
+
+    def _format_get_results(self, results: Dict) -> List[Dict]:
+        documents = results.get('documents') or []
+        metadatas = results.get('metadatas') or []
+        chunks = [
+            {"content": doc, "metadata": meta or {}}
+            for doc, meta in zip(documents, metadatas)
+        ]
+        chunks.sort(key=lambda c: (c['metadata'].get('page', 0), c['metadata'].get('start_index', 0)))
+        return chunks
     
     def clear_collection(self):
         """Clear all documents from the collection"""
